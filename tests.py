@@ -1,65 +1,44 @@
 import unittest
-import transaction
 
 from pyramid import testing
 
 
-def dummy_request(dbsession):
-    return testing.DummyRequest(dbsession=dbsession)
-
-
-class BaseTest(unittest.TestCase):
+class TutorialViewTests(unittest.TestCase):
     def setUp(self):
-        self.config = testing.setUp(settings={
-            'sqlalchemy.url': 'sqlite:///:memory:'
-        })
-        self.config.include('.models')
-        settings = self.config.get_settings()
-
-        from .models import (
-            get_engine,
-            get_session_factory,
-            get_tm_session,
-            )
-
-        self.engine = get_engine(settings)
-        session_factory = get_session_factory(self.engine)
-
-        self.session = get_tm_session(session_factory, transaction.manager)
-
-    def init_database(self):
-        from .models.meta import Base
-        Base.metadata.create_all(self.engine)
+        self.config = testing.setUp()
 
     def tearDown(self):
-        from .models.meta import Base
-
         testing.tearDown()
-        transaction.abort()
-        Base.metadata.drop_all(self.engine)
+
+    def test_home(self):
+        from .views import home
+
+        request = testing.DummyRequest()
+        response = home(request)
+        # Our view now returns data
+        self.assertEqual('Home View', response['name'])
+
+    def test_hello(self):
+        from .views import hello
+
+        request = testing.DummyRequest()
+        response = hello(request)
+        # Our view now returns data
+        self.assertEqual('Hello View', response['name'])
 
 
-class TestMyViewSuccessCondition(BaseTest):
-
+class TutorialFunctionalTests(unittest.TestCase):
     def setUp(self):
-        super(TestMyViewSuccessCondition, self).setUp()
-        self.init_database()
+        from tutorial import main
+        app = main({})
+        from webtest import TestApp
 
-        from .models import MyModel
+        self.testapp = TestApp(app)
 
-        model = MyModel(name='one', value=55)
-        self.session.add(model)
+    def test_home(self):
+        res = self.testapp.get('/', status=200)
+        self.assertIn(b'<h1>Hi Home View', res.body)
 
-    def test_passing_view(self):
-        from .views.default import my_view
-        info = my_view(dummy_request(self.session))
-        self.assertEqual(info['one'].name, 'one')
-        self.assertEqual(info['project'], 'sample_project')
-
-
-class TestMyViewFailureCondition(BaseTest):
-
-    def test_failing_view(self):
-        from .views.default import my_view
-        info = my_view(dummy_request(self.session))
-        self.assertEqual(info.status_int, 500)
+    def test_hello(self):
+        res = self.testapp.get('/howdy', status=200)
+        self.assertIn(b'<h1>Hi Hello View', res.body)
